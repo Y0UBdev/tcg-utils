@@ -1,5 +1,4 @@
-/* Configuration Firebase de l'application Web. */
-const firebaseConfig = {
+window.FIREBASE_CONFIG = {
   apiKey: "AIzaSyDsSP4yFoH9ysFDzG5AAiKog1C5nAwuhVs",
   authDomain: "tcg-novel-france.firebaseapp.com",
   projectId: "tcg-novel-france",
