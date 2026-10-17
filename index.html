@@ -170,6 +170,24 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
 .export-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 5px 12px; max-height: min(45vh, 420px); overflow: auto; padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
 .export-field { display: flex; gap: 7px; align-items: flex-start; min-width: 0; overflow-wrap: anywhere; }
 .export-dialog .actions { justify-content: flex-end; margin-top: 14px; }
+.rules-panel { padding: 12px; }
+.rules-panel h2 { margin: 0 0 8px; font: 600 17px/1.2 var(--font-head); }
+.rules-panel > p { margin: 0 0 10px; color: var(--muted); }
+.rules-issues { display: grid; gap: 6px; }
+.rules-issue { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 7px 9px; background: var(--err-soft); color: var(--err); border-radius: 6px; }
+.rules-ok { color: var(--ok); }
+.rules-issue strong { color: inherit; }
+.works-dialog { width: min(900px, calc(100vw - 28px)); max-height: min(88vh, 820px); padding: 18px; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: auto; }
+.works-dialog::backdrop { background: rgb(10 14 30 / 55%); }
+.works-dialog h2, .works-dialog h3 { margin: 0 0 10px; font: 600 20px/1.2 var(--font-head); }
+.works-dialog h3 { margin-top: 16px; font-size: 17px; }
+.works-list { max-height: 42vh; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+.works-list table { min-width: 700px; }
+.works-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 9px; }
+.works-form-grid label { display: grid; gap: 4px; }
+.works-form-grid input, .works-form-grid textarea { width: 100%; min-width: 0; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 7px 9px; }
+.works-form-grid textarea { min-height: 72px; resize: vertical; }
+.works-dialog .actions { justify-content: flex-end; margin-top: 12px; }
 
 @media (max-width: 1000px) {
   .filters { grid-template-columns: 1fr 1fr; }
@@ -198,12 +216,14 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
       <button class="btn" id="btn-logout" type="button" hidden>Déconnexion</button>
       <button class="btn" id="btn-import" type="button">Importer CSV + JSON</button>
       <button class="btn" id="btn-export" type="button">Exporter…</button>
+      <button class="btn" id="btn-works" type="button">Gérer les œuvres</button>
       <button class="btn primary" id="btn-save" type="button">Synchroniser</button>
     </div>
   </div>
 
   <div class="stats" id="stats"></div>
   <div id="banners"></div>
+  <div id="rules-status"></div>
 
   <div class="filters" id="filters">
     <input id="f-q" type="search" placeholder="Rechercher un personnage, une œuvre…" aria-label="Rechercher">
@@ -250,6 +270,27 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
     <div class="actions">
       <button class="btn" id="export-cancel" type="button">Annuler</button>
       <button class="btn primary" type="submit">Télécharger</button>
+    </div>
+  </form>
+</dialog>
+<dialog class="works-dialog" id="works-dialog" aria-labelledby="works-title">
+  <h2 id="works-title">Gérer les œuvres</h2>
+  <p class="hint">Les rangs 1 à 5 demandent au moins 1 Divin ; les rangs 6 à 10 demandent au moins 1 Mythique. Chaque œuvre peut avoir au maximum 2 Divins et 3 Mythiques. Les œuvres sans personnage sont exemptées.</p>
+  <div class="banner" id="works-readonly" hidden><p>Connecte-toi avec un compte Google autorisé pour ajouter, modifier ou supprimer des œuvres.</p></div>
+  <div class="works-list" id="works-list"></div>
+  <h3 id="work-form-title">Ajouter une œuvre</h3>
+  <form id="work-form">
+    <input id="work-original-key" type="hidden">
+    <div class="works-form-grid">
+      <label>Nom de l’œuvre<input id="work-title" required maxlength="250"></label>
+      <label>Rang dans le classement<input id="work-rank" type="number" min="1" step="1"></label>
+      <label>Wiki<input id="work-wiki" type="url" placeholder="https://…"></label>
+      <label>Note<textarea id="work-note"></textarea></label>
+    </div>
+    <div class="actions">
+      <button class="btn" id="work-cancel-edit" type="button" hidden>Annuler la modification</button>
+      <button class="btn primary" id="work-submit" type="submit">Ajouter l’œuvre</button>
+      <button class="btn" id="works-close" type="button">Fermer</button>
     </div>
   </form>
 </dialog>
@@ -437,6 +478,13 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
         save();
         if (cbP) cbP(picks);
         return Promise.resolve();
+      },
+      deletePicks: function (ids) {
+        picks = Object.assign({}, picks);
+        ids.forEach(function (id) { delete picks[id]; });
+        save();
+        if (cbP) cbP(picks);
+        return Promise.resolve();
       }
     };
   }
@@ -491,6 +539,13 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
         }
       },
       savePick: function (id, pick) { return db.doc("picks/" + id).set(pick); },
+      deletePicks: async function (ids) {
+        for (var i = 0; i < ids.length; i += 450) {
+          var batch = db.batch();
+          ids.slice(i, i + 450).forEach(function (id) { batch.delete(db.doc("picks/" + id)); });
+          await batch.commit();
+        }
+      },
       saveWorks: function (list) { return db.doc("meta/works").set({ works: list, at: Date.now() }); }
     };
   }
@@ -551,13 +606,44 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
   }
   /* toutes les œuvres : celles du JSON (même sans personnage) + celles vues dans le CSV */
   function workIndex() {
-    var m = {};
+    var m = Object.create(null);
     S.works.forEach(function (w) { m[normKey(w.title)] = { title: w.title, rank: w.rank, info: w, n: 0 }; });
     S.chars.forEach(function (c) {
       if (!c.wk) return;
       (m[c.wk] = m[c.wk] || { title: c.work, rank: null, info: null, n: 0 }).n++;
     });
     return m;
+  }
+  function rarityCounts(key) {
+    var counts = { divine: 0, mythique: 0 };
+    S.chars.forEach(function (c) {
+      if (c.wk !== key) return;
+      var rarity = effRarity(c);
+      if (rarity === "Divin") counts.divine++;
+      if (rarity === "Mythique") counts.mythique++;
+    });
+    return counts;
+  }
+  function workRuleIssues(work) {
+    if (!work.n) return [];
+    var counts = rarityCounts(normKey(work.title)), issues = [];
+    if (counts.divine > 2) issues.push("maximum de 2 Divins dépassé (" + counts.divine + ")");
+    if (counts.mythique > 3) issues.push("maximum de 3 Mythiques dépassé (" + counts.mythique + ")");
+    if (work.rank >= 1 && work.rank <= 5 && counts.divine < 1) issues.push("rang " + work.rank + " : ajouter au moins 1 Divin");
+    if (work.rank >= 6 && work.rank <= 10 && counts.mythique < 1) issues.push("rang " + work.rank + " : ajouter au moins 1 Mythique");
+    return issues;
+  }
+  function allWorkRuleIssues() {
+    var ix = workIndex();
+    return Object.keys(ix).map(function (key) {
+      return { key: key, work: ix[key], issues: workRuleIssues(ix[key]) };
+    }).filter(function (entry) { return entry.issues.length > 0; })
+      .sort(function (a, b) {
+        if (a.work.rank != null && b.work.rank != null) return a.work.rank - b.work.rank;
+        if (a.work.rank != null) return -1;
+        if (b.work.rank != null) return 1;
+        return a.work.title.localeCompare(b.work.title, "fr");
+      });
   }
   async function handleWorksJSON(text) {
     var data; try { data = JSON.parse(text); } catch (e) { notify("JSON illisible.", true); return; }
@@ -567,14 +653,187 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
     try { await S.store.saveWorks(w); notify(w.length + " œuvres importées."); }
     catch (e) { notify("Import impossible : " + ((e && e.message) || "erreur"), true); }
   }
+  function resetWorkForm() {
+    $("#work-form").reset();
+    $("#work-original-key").value = "";
+    $("#work-form-title").textContent = "Ajouter une œuvre";
+    $("#work-submit").textContent = "Ajouter l’œuvre";
+    $("#work-cancel-edit").hidden = true;
+  }
+  function renderWorksManager() {
+    var list = $("#works-list"), ix = workIndex(), entries = Object.keys(ix).map(function (key) {
+      return { key: key, work: ix[key], issues: workRuleIssues(ix[key]) };
+    });
+    $("#works-readonly").hidden = S.canWrite;
+    $("#work-title").disabled = !S.canWrite;
+    $("#work-rank").disabled = !S.canWrite;
+    $("#work-wiki").disabled = !S.canWrite;
+    $("#work-note").disabled = !S.canWrite;
+    $("#work-submit").disabled = !S.canWrite;
+    entries.sort(function (a, b) {
+      if (a.work.rank != null && b.work.rank != null) return a.work.rank - b.work.rank;
+      if (a.work.rank != null) return -1;
+      if (b.work.rank != null) return 1;
+      return a.work.title.localeCompare(b.work.title, "fr");
+    });
+    list.textContent = "";
+    if (!entries.length) {
+      list.append(h("p", { class: "empty", text: "Aucune œuvre. Ajoute-en une ou importe le JSON des œuvres." }));
+      return;
+    }
+    var body = h("tbody");
+    entries.forEach(function (entry) {
+      var w = entry.work, status = !w.n ? "Exemptée — aucun personnage" : entry.issues.length ? entry.issues.join(" ; ") : "Conforme";
+      body.append(h("tr", {},
+        h("td", { text: w.rank == null ? "—" : "#" + w.rank }),
+        h("td", { class: "name", text: w.title }),
+        h("td", { text: fmt(w.n) }),
+        h("td", { text: status }),
+        h("td", {}, h("div", { class: "actions" },
+          h("button", { class: "btn small", type: "button", disabled: !S.canWrite, onclick: function () {
+            $("#work-original-key").value = entry.key;
+            $("#work-title").value = w.title;
+            $("#work-rank").value = w.rank == null ? "" : String(w.rank);
+            $("#work-note").value = w.info ? w.info.note : "";
+            $("#work-wiki").value = w.info ? w.info.wiki : "";
+            $("#work-form-title").textContent = "Modifier une œuvre";
+            $("#work-submit").textContent = "Enregistrer";
+            $("#work-cancel-edit").hidden = false;
+            $("#work-title").focus();
+          }, text: "Modifier" }),
+          h("button", { class: "btn small", type: "button", disabled: !S.canWrite, onclick: function () { deleteWork(entry); }, text: "Supprimer" })))));
+    });
+    list.append(h("table", {},
+      h("thead", {}, h("tr", {}, ["Rang", "Œuvre", "Personnages", "État des règles", "Actions"].map(function (x) { return h("th", { text: x }); }))),
+      body));
+  }
+  function openWorksManager() {
+    if (S.demo) { notify("Quitte l’exemple avant de gérer les œuvres.", true); return; }
+    resetWorkForm();
+    renderWorksManager();
+    $("#works-dialog").showModal();
+  }
+  async function saveWorkDefinition(event) {
+    event.preventDefault();
+    if (!S.canWrite || S.demo) { notify("Connecte-toi avec un compte autorisé pour modifier les œuvres.", true); return; }
+    var oldKey = $("#work-original-key").value, title = $("#work-title").value.trim();
+    var rankText = $("#work-rank").value.trim(), rank = rankText ? Number(rankText) : null;
+    var note = $("#work-note").value.trim(), wiki = $("#work-wiki").value.trim();
+    if (!title) { notify("Le nom de l’œuvre est obligatoire.", true); return; }
+    if (rank != null && (!Number.isInteger(rank) || rank < 1)) { notify("Le rang doit être un entier supérieur ou égal à 1.", true); return; }
+    if (wiki) {
+      try { var parsedWiki = new URL(wiki); if (parsedWiki.protocol !== "https:" && parsedWiki.protocol !== "http:") throw new Error(); }
+      catch (e) { notify("L’adresse du wiki doit commencer par https:// ou http://.", true); return; }
+    }
+    var ix = workIndex(), existing = oldKey ? ix[oldKey] : null, nextKey = normKey(title);
+    if (!oldKey && ix[nextKey]) { notify("Cette œuvre existe déjà.", true); return; }
+    if (oldKey && nextKey !== oldKey && ix[nextKey]) { notify("Une œuvre portant déjà ce nom existe.", true); return; }
+    var updated = { title: title, rank: rank, note: note, wiki: wiki };
+    var rows = null, oldChars = [], newChars = [], changedTitle = !!(existing && existing.title !== title);
+    if (changedTitle && existing.n) {
+      var map = mapFromHead(S.head);
+      if (map.work < 0) { notify("Impossible de renommer : la colonne « œuvre » est absente des données.", true); return; }
+      oldChars = S.chars.slice().sort(function (a, b) { return a.i - b.i; });
+      var movedKeys = new Set(oldChars.filter(function (c) { return c.wk === oldKey; }).map(function (c) { return norm(c.name) + "|" + norm(title); }));
+      var conflict = oldChars.some(function (c) { return c.wk !== oldKey && movedKeys.has(norm(c.name) + "|" + norm(c.work)); });
+      if (conflict) { notify("Impossible de renommer : l’œuvre cible contient déjà au moins un personnage du même nom.", true); return; }
+      rows = oldChars.map(function (c) {
+        var row = (c.v || []).slice();
+        if (c.wk === oldKey) row[map.work] = title;
+        return row;
+      });
+      newChars = buildChars(S.head, rows);
+      if (newChars.length !== oldChars.length) { notify("Impossible de renommer : les personnages n’ont pas pu être réidentifiés.", true); return; }
+    }
+    var nextWorks = S.works.filter(function (w) { return normKey(w.title) !== oldKey; });
+    nextWorks.push(updated);
+    try {
+      if (rows) {
+        var idMap = {};
+        oldChars.forEach(function (c, i) { if (c.wk === oldKey) idMap[c.id] = newChars[i].id; });
+        await S.store.replaceChars(S.head, rows, function () {});
+        var oldPickIds = [];
+        for (var oldId in idMap) {
+          if (!Object.prototype.hasOwnProperty.call(idMap, oldId)) continue;
+          var newId = idMap[oldId];
+          if (newId !== oldId && S.picks[oldId]) await S.store.savePick(newId, S.picks[oldId]);
+          if (newId !== oldId) oldPickIds.push(oldId);
+        }
+        if (oldPickIds.length) await S.store.deletePicks(oldPickIds);
+      }
+      await S.store.saveWorks(nextWorks);
+      resetWorkForm();
+      renderWorksManager();
+      notify(existing ? "Œuvre modifiée." : "Œuvre ajoutée.");
+    } catch (e) { notify("Enregistrement de l’œuvre impossible : " + ((e && e.message) || "erreur"), true); }
+  }
+  async function deleteWork(entry) {
+    var title = entry.work.title;
+    if (!S.canWrite || S.demo) { notify("Connecte-toi avec un compte autorisé pour supprimer une œuvre.", true); return; }
+    if (!window.confirm("Supprimer « " + title + " » et ses " + fmt(entry.work.n) + " personnage(s) ? Cette action supprimera aussi leurs choix de rareté et de photos. Elle est irréversible.")) return;
+    try {
+      var key = entry.key, removed = S.chars.filter(function (c) { return c.wk === key; });
+      var kept = S.chars.filter(function (c) { return c.wk !== key; }).slice().sort(function (a, b) { return a.i - b.i; });
+      if (removed.length) {
+        await S.store.replaceChars(S.head, kept.map(function (c) { return (c.v || []).slice(); }), function () {});
+        await S.store.deletePicks(removed.map(function (c) { return c.id; }));
+      }
+      await S.store.saveWorks(S.works.filter(function (w) { return normKey(w.title) !== key; }));
+      if (S.f.work === key) S.f.work = "";
+      resetWorkForm();
+      renderWorksManager();
+      notify("Œuvre supprimée" + (removed.length ? ", avec ses personnages et leurs choix." : "."));
+    } catch (e) { notify("Suppression impossible : " + ((e && e.message) || "erreur"), true); }
+  }
+  function renderRuleStatus() {
+    var panel = $("#rules-status"), issues = allWorkRuleIssues();
+    panel.textContent = "";
+    if (!Object.keys(workIndex()).length) { panel.textContent = ""; return; }
+    if (!issues.length) {
+      panel.append(h("div", { class: "banner rules-panel rules-ok" },
+        h("div", {}, h("h2", { text: "Règles de rareté respectées" }),
+          h("p", { text: "Les œuvres sans personnage sont exemptées. Limites : 2 Divins et 3 Mythiques maximum par œuvre." }))));
+      return;
+    }
+    var rows = issues.map(function (entry) {
+      return h("div", { class: "rules-issue" },
+        h("strong", { text: (entry.work.rank != null ? "#" + entry.work.rank + " — " : "") + entry.work.title }),
+        h("span", { text: entry.issues.join(" ; ") }),
+        h("button", { class: "btn small", type: "button", onclick: function () {
+          S.f.work = entry.key; S.page = 0; renderAll();
+          $("#list").scrollIntoView({ behavior: "smooth", block: "start" });
+        }, text: "Voir les personnages" }));
+    });
+    panel.append(h("section", { class: "panel rules-panel" },
+      h("h2", { text: "Œuvres à corriger (" + issues.length + ")" }),
+      h("p", { text: "Rangs 1–5 : au moins 1 Divin. Rangs 6–10 : au moins 1 Mythique. Maximum par œuvre : 2 Divins et 3 Mythiques. Les œuvres sans personnage sont exemptées." }),
+      h("div", { class: "rules-issues" }, rows)));
+  }
 
   /* ---------- actions ---------- */
   /* photo principale effective : le choix de l'équipe, sinon la première image du CSV */
   function effPrimary(c) { var p = S.picks[c.id]; return (p && p.primary) || c.img || ""; }
   function effRarity(c) { var p = S.picks[c.id]; return (p && p.rarity) || c.rarity; }
   function setRarity(c, r) {
+    var current = effRarity(c), next = (!r || r === c.rarity) ? c.rarity : r;
+    if (next === current) return;
+    var work = workIndex()[c.wk];
+    var counts = rarityCounts(c.wk);
+    if (work && work.rank >= 1 && work.rank <= 5 && current === "Divin" && next !== "Divin" && counts.divine <= 1) {
+      notify("Cette œuvre du top 5 doit conserver au moins un personnage Divin.", true); renderDetail(); return;
+    }
+    if (work && work.rank >= 6 && work.rank <= 10 && current === "Mythique" && next !== "Mythique" && counts.mythique <= 1) {
+      notify("Cette œuvre du top 6 à 10 doit conserver au moins un personnage Mythique.", true); renderDetail(); return;
+    }
+    if (next === "Divin" && current !== "Divin" && counts.divine >= 2) {
+      notify("Maximum de 2 personnages Divins atteint pour « " + c.work + " ».", true); renderDetail(); return;
+    }
+    if (next === "Mythique" && current !== "Mythique" && counts.mythique >= 3) {
+      notify("Maximum de 3 personnages Mythiques atteint pour « " + c.work + " ».", true); renderDetail(); return;
+    }
     var p = pick(c.id); p.rarity = (!r || r === c.rarity) ? "" : r;
     savePick(c.id, p);
+    if (work && (work.rank >= 1 && work.rank <= 5 || work.rank >= 6 && work.rank <= 10)) renderRuleStatus();
   }
   function setGif(c, url) {
     url = (url || "").trim(); var ok = false;
@@ -1020,7 +1279,8 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
   }
 
   function renderAll() {
-    renderStats(); renderBanners(); renderFilterOptions(); renderList(); renderDetail();
+    renderStats(); renderBanners(); renderRuleStatus(); renderFilterOptions(); renderList(); renderDetail();
+    if ($("#works-dialog").open) renderWorksManager();
     $("#btn-save").disabled = !S.chars.length || S.demo || !S.canWrite;
     $("#btn-import").disabled = !S.canWrite && !S.demo;
     $("#btn-export").disabled = !S.chars.length || S.demo;
@@ -1038,6 +1298,10 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
     $("#btn-export").addEventListener("click", openExportDialog);
     $("#export-form").addEventListener("submit", handleExportSubmit);
     $("#export-cancel").addEventListener("click", function () { $("#export-dialog").close(); });
+    $("#btn-works").addEventListener("click", openWorksManager);
+    $("#work-form").addEventListener("submit", saveWorkDefinition);
+    $("#work-cancel-edit").addEventListener("click", resetWorkForm);
+    $("#works-close").addEventListener("click", function () { $("#works-dialog").close(); });
     $("#btn-login").addEventListener("click", async function () {
       if (!window.firebase || !window.FIREBASE_CONFIG || !window.FIREBASE_CONFIG.apiKey || String(window.FIREBASE_CONFIG.apiKey).indexOf("REMPLACER") >= 0) { notify("Configure d’abord firebase-config.js.", true); return; }
       try { await firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider()); } catch (e) { notify("Connexion impossible : " + ((e && e.message) || "erreur"), true); }

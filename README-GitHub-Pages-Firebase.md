@@ -10,6 +10,10 @@
 
 Les modifications (choix de photos, rareté, GIF, etc.) sont synchronisées en temps réel dans Cloud Firestore. Le bouton **Exporter…** permet de choisir le format CSV ou Excel et les colonnes à inclure. Le classeur Excel contient un tableau structuré avec filtres, style alterné et largeurs de colonnes adaptées. L'import d'un nouveau CSV fusionne les personnages : les doublons (clé normalisée `personnage + œuvre`) sont ignorés et les choix déjà enregistrés restent dans leur collection dédiée.
 
+Les contributeurs peuvent gérer les œuvres depuis **Gérer les œuvres** : ajouter une œuvre, modifier son rang, son nom, sa note ou son wiki, et la supprimer. Un renommage met aussi à jour les personnages associés et conserve leurs choix. Une suppression d’œuvre demande confirmation et supprime ses personnages ainsi que leurs choix de photos et de rareté.
+
+Les règles de rareté sont affichées dans l’application. Les œuvres classées de 1 à 5 doivent avoir au moins un personnage Divin ; celles classées de 6 à 10 doivent avoir au moins un Mythique. Toute œuvre est limitée à 2 Divins et 3 Mythiques. Les œuvres sans personnage sont exemptées des règles ; les modifications de rareté empêchent de dépasser les plafonds ou de retirer le dernier personnage requis.
+
 ## Configuration gratuite
 
 1. Crée un projet sur https://console.firebase.google.com/.
