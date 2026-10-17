@@ -160,6 +160,16 @@ td.desc span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: 
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; z-index: 30; max-width: min(92vw, 520px); font-size: 13px; }
 .toast.err { background: var(--err); color: #fff; }
 .skeleton { padding: 40px; text-align: center; color: var(--muted); }
+dialog.export-dialog { width: min(620px, calc(100vw - 28px)); max-height: min(85vh, 760px); padding: 18px; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
+.export-dialog h2 { margin: 0 0 12px; font: 600 20px/1.2 var(--font-head); }
+.export-dialog p { margin: 0 0 12px; color: var(--muted); }
+.export-options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 12px; }
+.export-options label { display: flex; align-items: center; gap: 7px; }
+.export-options select { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 6px 8px; }
+.export-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 5px 12px; max-height: min(45vh, 420px); overflow: auto; padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
+.export-field { display: flex; gap: 7px; align-items: flex-start; min-width: 0; overflow-wrap: anywhere; }
+.export-dialog .actions { justify-content: flex-end; margin-top: 14px; }
 
 @media (max-width: 1000px) {
   .filters { grid-template-columns: 1fr 1fr; }
@@ -187,7 +197,7 @@ td.desc span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: 
       <button class="btn" id="btn-login" type="button">Connexion Google</button>
       <button class="btn" id="btn-logout" type="button" hidden>Déconnexion</button>
       <button class="btn" id="btn-import" type="button">Importer CSV + JSON</button>
-      <button class="btn" id="btn-export" type="button">Exporter CSV</button>
+      <button class="btn" id="btn-export" type="button">Exporter…</button>
       <button class="btn primary" id="btn-save" type="button">Synchroniser</button>
     </div>
   </div>
@@ -223,6 +233,26 @@ td.desc span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: 
   </div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<dialog class="export-dialog" id="export-dialog" aria-labelledby="export-title">
+  <form id="export-form">
+    <h2 id="export-title">Exporter les personnages</h2>
+    <p>Choisis un format et les colonnes à inclure. L’export contient tous les personnages, indépendamment des filtres affichés.</p>
+    <div class="export-options">
+      <label for="export-format">Format</label>
+      <select id="export-format">
+        <option value="csv">CSV (.csv)</option>
+        <option value="xlsx">Excel (.xlsx)</option>
+      </select>
+      <button class="btn small" id="export-select-all" type="button">Tout sélectionner</button>
+      <button class="btn small" id="export-select-none" type="button">Tout désélectionner</button>
+    </div>
+    <div class="export-fields" id="export-fields"></div>
+    <div class="actions">
+      <button class="btn" id="export-cancel" type="button">Annuler</button>
+      <button class="btn primary" type="submit">Télécharger</button>
+    </div>
+  </form>
+</dialog>
 
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
@@ -616,15 +646,103 @@ td.desc span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: 
     return { head: union, rows: result, added: added, duplicates: duplicates };
   }
 
-  function exportCSV() {
-    if (!S.chars.length || S.demo) { notify('Aucune donnée réelle à exporter.', true); return; }
-    var t = buildTable(S.chars, S.head, S.picks);
-    var csv = '\uFEFF' + [t.head].concat(t.rows).map(function (r) { return r.map(csvCell).join(';'); }).join('\r\n');
-    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  function downloadBlob(blob, filename) {
     var url = URL.createObjectURL(blob), a = document.createElement('a');
-    a.href = url; a.download = 'personnages-tcg-novel-france.csv'; document.body.appendChild(a); a.click(); a.remove();
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-    notify('Export CSV prêt (' + fmt(t.rows.length) + ' personnages).');
+  }
+  function selectedExportData() {
+    var t = buildTable(S.chars, S.head, S.picks);
+    var selected = [].slice.call(document.querySelectorAll("#export-fields input:checked"))
+      .map(function (input) { return Number(input.value); });
+    if (!selected.length) { notify("Sélectionne au moins une colonne à exporter.", true); return null; }
+    return {
+      head: selected.map(function (i) { return t.head[i]; }),
+      rows: t.rows.map(function (row) { return selected.map(function (i) { return row[i] == null ? "" : row[i]; }); })
+    };
+  }
+  function exportCSV(data) {
+    var csv = '\uFEFF' + [data.head].concat(data.rows).map(function (r) { return r.map(csvCell).join(';'); }).join('\r\n');
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    downloadBlob(blob, 'personnages-tcg-novel-france.csv');
+    notify('Export CSV prêt (' + fmt(data.rows.length) + ' personnages).');
+  }
+  var excelJSLoading = null;
+  function loadExcelJS() {
+    if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+    if (!excelJSLoading) excelJSLoading = new Promise(function (resolve, reject) {
+      var script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js";
+      script.onload = function () {
+        if (window.ExcelJS) resolve(window.ExcelJS);
+        else reject(new Error("La bibliothèque Excel n’a pas pu être initialisée."));
+      };
+      script.onerror = function () { reject(new Error("La bibliothèque Excel n’a pas pu être téléchargée.")); };
+      document.head.appendChild(script);
+    });
+    return excelJSLoading;
+  }
+  async function exportExcel(data) {
+    try {
+      if (data.head.length > 16384 || data.rows.length > 1048575) {
+        throw new Error("Le fichier dépasse les limites de lignes ou de colonnes prises en charge par Excel.");
+      }
+      var ExcelJS = await loadExcelJS();
+      var workbook = new ExcelJS.Workbook();
+      var sheet = workbook.addWorksheet("Personnages");
+      var seen = Object.create(null);
+      var headers = data.head.map(function (value, i) {
+        var base = String(value || "").trim() || "Colonne " + (i + 1);
+        var name = base, suffix = 2;
+        while (seen[name.toLocaleLowerCase()]) name = base + " (" + suffix++ + ")";
+        seen[name.toLocaleLowerCase()] = true;
+        return name;
+      });
+      sheet.addTable({
+        name: "Personnages",
+        ref: "A1",
+        headerRow: true,
+        style: { theme: "TableStyleMedium2", showRowStripes: true },
+        columns: headers.map(function (name) { return { name: name }; }),
+        rows: data.rows
+      });
+      sheet.columns = headers.map(function (header, index) {
+        var longest = header.length;
+        data.rows.forEach(function (row) { longest = Math.max(longest, String(row[index] == null ? "" : row[index]).length); });
+        return { width: Math.min(Math.max(longest + 2, 12), 50) };
+      });
+      var buffer = await workbook.xlsx.writeBuffer();
+      downloadBlob(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "personnages-tcg-novel-france.xlsx");
+      notify("Export Excel prêt (" + fmt(data.rows.length) + " personnages). Le tableau inclut filtres et lignes alternées.");
+    } catch (e) {
+      excelJSLoading = null;
+      notify("Export Excel impossible : " + ((e && e.message) || "erreur inconnue"), true);
+    }
+  }
+  function openExportDialog() {
+    if (!S.chars.length || S.demo) { notify('Aucune donnée réelle à exporter.', true); return; }
+    var t = buildTable(S.chars, S.head, S.picks), fields = $("#export-fields");
+    fields.textContent = "";
+    t.head.forEach(function (name, i) {
+      fields.append(h("label", { class: "export-field" },
+        h("input", { type: "checkbox", checked: true, value: String(i) }),
+        h("span", { text: name || "Colonne " + (i + 1) })));
+    });
+    $("#export-select-all").onclick = function () {
+      [].slice.call(fields.querySelectorAll("input")).forEach(function (input) { input.checked = true; });
+    };
+    $("#export-select-none").onclick = function () {
+      [].slice.call(fields.querySelectorAll("input")).forEach(function (input) { input.checked = false; });
+    };
+    $("#export-dialog").showModal();
+  }
+  function handleExportSubmit(event) {
+    event.preventDefault();
+    var data = selectedExportData();
+    if (!data) return;
+    $("#export-dialog").close();
+    if ($("#export-format").value === "xlsx") exportExcel(data);
+    else exportCSV(data);
   }
 
   async function handleFile(file) {
@@ -917,7 +1035,9 @@ td.desc span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: 
       fs.reduce(function (p, f) { return p.then(function () { return handleFile(f); }); }, Promise.resolve());
     });
     $("#btn-save").addEventListener("click", saveBase);
-    $("#btn-export").addEventListener("click", exportCSV);
+    $("#btn-export").addEventListener("click", openExportDialog);
+    $("#export-form").addEventListener("submit", handleExportSubmit);
+    $("#export-cancel").addEventListener("click", function () { $("#export-dialog").close(); });
     $("#btn-login").addEventListener("click", async function () {
       if (!window.firebase || !window.FIREBASE_CONFIG || !window.FIREBASE_CONFIG.apiKey || String(window.FIREBASE_CONFIG.apiKey).indexOf("REMPLACER") >= 0) { notify("Configure d’abord firebase-config.js.", true); return; }
       try { await firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider()); } catch (e) { notify("Connexion impossible : " + ((e && e.message) || "erreur"), true); }

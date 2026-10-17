@@ -8,7 +8,7 @@
 - `personnages.csv` : CSV initial, facultatif. Il est chargé automatiquement au premier démarrage si Firestore est vide.
 - `oeuvres.json` : JSON des œuvres, facultatif, chargé avec le CSV initial.
 
-Les modifications (choix de photos, rareté, GIF, etc.) sont synchronisées en temps réel dans Cloud Firestore. Le bouton **Exporter CSV** télécharge un CSV contenant les choix actuels. L'import d'un nouveau CSV fusionne les personnages : les doublons (clé normalisée `personnage + œuvre`) sont ignorés et les choix déjà enregistrés restent dans leur collection dédiée.
+Les modifications (choix de photos, rareté, GIF, etc.) sont synchronisées en temps réel dans Cloud Firestore. Le bouton **Exporter…** permet de choisir le format CSV ou Excel et les colonnes à inclure. Le classeur Excel contient un tableau structuré avec filtres, style alterné et largeurs de colonnes adaptées. L'import d'un nouveau CSV fusionne les personnages : les doublons (clé normalisée `personnage + œuvre`) sont ignorés et les choix déjà enregistrés restent dans leur collection dédiée.
 
 ## Configuration gratuite
 
@@ -27,8 +27,8 @@ La configuration des règles fournie permet à tout utilisateur connecté avec G
 
 La configuration Firebase côté navigateur n'est pas un mot de passe. La protection des données dépend des règles Firestore. Le plan Spark de Firebase est gratuit dans les limites de quotas indiquées par Firebase ; un usage élevé peut dépasser les quotas gratuits.
 
-## CSV
+## Import et export
 
 - Import : sélectionne un CSV depuis le bouton **Importer CSV + JSON**. Les nouveaux personnages sont ajoutés, les doublons sont ignorés.
-- Export : **Exporter CSV** télécharge les personnages et les choix de l'équipe dans les colonnes `url_image`, `url_image_secours`, `photo_validee`, `url_gif`, `media_principal`, `rarete` et `rarete_script`.
+- Export : **Exporter…** permet de choisir CSV ou Excel et de sélectionner les colonnes à inclure. ExcelJS est chargé depuis jsDelivr au moment d'un export Excel ; une connexion Internet est requise pour ce format. Le classeur Excel utilise un tableau structuré nommé `Personnages`, avec filtres et lignes alternées.
 - Les fichiers de la racine sont une base d'initialisation ; après le premier chargement, Firestore devient la source partagée des modifications.
