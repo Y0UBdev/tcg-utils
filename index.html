@@ -1277,7 +1277,7 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
     var scrollTop = d.scrollTop, ta = $("#add-urls"), draft = ta ? ta.value : "", focusAdd = ta && document.activeElement === ta;
     d.hidden = false; layout.classList.add("has-detail"); d.textContent = "";
     var p = pick(c.id), w = S.canWrite;
-    var pinUrl = c.pin || ("https://www.pinterest.com/search/pins/?q=" + encodeURIComponent(c.name + " " + c.work + " novel"));
+    var pinUrl = c.pin || ("https://www.pinterest.com/search/pins/?q=" + encodeURIComponent(c.name + " " + c.work));
     var urls = []; if (c.img) urls.push({ u: c.img, kind: "csv" });
     p.cands.forEach(function (u) { urls.push({ u: u, kind: "added" }); });
 
