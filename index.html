@@ -112,6 +112,7 @@ td.desc span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: 
   color: var(--rc, var(--r-commun)); background: color-mix(in srgb, var(--rc, var(--r-commun)) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--rc, var(--r-commun)) 35%, transparent);
 }
+.pill[data-r="Special"] { --rc: #0f8a8a; }
 .pill[data-r="Divin"] { --rc: var(--r-divin); } .pill[data-r="Mythique"] { --rc: var(--r-mythique); }
 .pill[data-r="Légendaire"] { --rc: var(--r-legendaire); } .pill[data-r="Épique"] { --rc: var(--r-epique); }
 .pill[data-r="Rare"] { --rc: var(--r-rare); } .pill[data-r="Peu commun"] { --rc: var(--r-peu); }
@@ -157,6 +158,8 @@ td.desc span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: 
 .gifadd .line { display: flex; gap: 6px; }
 .gifadd input { flex: 1; font: 12.5px var(--font-mono); }
 .hint { color: var(--muted); font-size: 12.5px; margin: 0; }
+.mediachoice { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.mediachoice label { display: flex; gap: 6px; align-items: center; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; z-index: 30; max-width: min(92vw, 520px); font-size: 13px; }
 .toast.err { background: var(--err); color: #fff; }
 .skeleton { padding: 40px; text-align: center; color: var(--muted); }
@@ -185,7 +188,7 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
 .works-list table { min-width: 700px; }
 .works-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 9px; }
 .works-form-grid label { display: grid; gap: 4px; }
-.works-form-grid input, .works-form-grid textarea { width: 100%; min-width: 0; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 7px 9px; }
+.works-form-grid input, .works-form-grid select, .works-form-grid textarea { width: 100%; min-width: 0; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 7px 9px; }
 .works-form-grid textarea { min-height: 72px; resize: vertical; }
 .works-dialog .actions { justify-content: flex-end; margin-top: 12px; }
 
@@ -216,7 +219,7 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
       <button class="btn" id="btn-logout" type="button" hidden>Déconnexion</button>
       <button class="btn" id="btn-import" type="button">Importer CSV + JSON</button>
       <button class="btn" id="btn-export" type="button">Exporter…</button>
-      <button class="btn" id="btn-works" type="button">Gérer les œuvres</button>
+      <button class="btn" id="btn-works" type="button">Œuvres et personnages</button>
       <button class="btn primary" id="btn-save" type="button">Synchroniser</button>
     </div>
   </div>
@@ -274,10 +277,22 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
   </form>
 </dialog>
 <dialog class="works-dialog" id="works-dialog" aria-labelledby="works-title">
-  <h2 id="works-title">Gérer les œuvres</h2>
+  <h2 id="works-title">Gérer les œuvres et les personnages</h2>
   <p class="hint">Les rangs 1 à 5 demandent au moins 1 Divin ; les rangs 6 à 10 demandent au moins 1 Mythique. Chaque œuvre peut avoir au maximum 2 Divins et 3 Mythiques. Les œuvres sans personnage sont exemptées.</p>
   <div class="banner" id="works-readonly" hidden><p>Connecte-toi avec un compte Google autorisé pour ajouter, modifier ou supprimer des œuvres.</p></div>
   <div class="works-list" id="works-list"></div>
+  <h3>Ajouter un personnage</h3>
+  <form id="char-form">
+    <div class="works-form-grid">
+      <label>Nom du personnage<input id="char-name" required maxlength="200"></label>
+      <label>Œuvre (existante ou nouvelle)<input id="char-work" list="char-works" required maxlength="250"></label>
+      <label>Rareté<select id="char-rarity"></select></label>
+      <label>Score<input id="char-score" type="number" min="0" step="1"></label>
+      <label>Description<textarea id="char-desc"></textarea></label>
+    </div>
+    <datalist id="char-works"></datalist>
+    <div class="actions"><button class="btn primary" id="char-submit" type="submit">Ajouter le personnage</button></div>
+  </form>
   <h3 id="work-form-title">Ajouter une œuvre</h3>
   <form id="work-form">
     <input id="work-original-key" type="hidden">
@@ -302,7 +317,7 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
 <script>
 (function () {
   "use strict";
-  var RARITIES = ["Divin", "Mythique", "Légendaire", "Épique", "Rare", "Peu commun", "Commun"];
+  var RARITIES = ["Special", "Divin", "Mythique", "Légendaire", "Épique", "Rare", "Peu commun", "Commun"];
   var PAGE = 100, CHUNK = 80;
   var COLS = {
     name: ["personnage", "nom", "name", "character", "nomduperso"],
@@ -418,7 +433,7 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
       return i;
     }
     var imgI = col("url_image", m.img), secI = col("url_image_secours"), valI = col("photo_validee"),
-        gifI = col("url_gif"), medI = col("media_principal"), rarI = col("rarete", m.rarity), rscI = col("rarete_script");
+        gifI = col("url_gif"), typI = col("type_media"), rarI = col("rarete", m.rarity), rscI = col("rarete_script");
     var rows = [];
     chars.slice().sort(function (a, b) { return a.i - b.i; }).forEach(function (c) {
       var r = oh.map(function (_, j) { return j < base && c.v[j] != null ? c.v[j] : ""; });
@@ -431,7 +446,7 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
       var fr = p.rarity || c.rarity;
       r[rarI] = fr; r[rscI] = c.rarityScript || c.rarity;
       r[gifI] = p.gif || "";
-      r[medI] = (fr === "Divin" && p.gif && p.showGif) ? p.gif : final;
+      r[typI] = fr === "Special" ? "gif" : "images";
       rows.push(r);
     });
     return { head: oh, rows: rows };
@@ -567,7 +582,7 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
   }
   function pick(id) {
     var p = S.picks[id] || {};
-    return { primary: p.primary || "", backup: p.backup || "", rarity: p.rarity || "", gif: p.gif || "", showGif: !!p.showGif, cands: Array.isArray(p.cands) ? p.cands.slice() : [] };
+    return { primary: p.primary || "", backup: p.backup || "", rarity: p.rarity || "", gif: p.gif || "", cands: Array.isArray(p.cands) ? p.cands.slice() : [] };
   }
   function savePick(id, next) {
     if (!S.canWrite) return Promise.resolve();
@@ -619,7 +634,7 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
     S.chars.forEach(function (c) {
       if (c.wk !== key) return;
       var rarity = effRarity(c);
-      if (rarity === "Divin") counts.divine++;
+      if (rarity === "Divin" || rarity === "Special") counts.divine++;
       if (rarity === "Mythique") counts.mythique++;
     });
     return counts;
@@ -665,6 +680,11 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
       return { key: key, work: ix[key], issues: workRuleIssues(ix[key]) };
     });
     $("#works-readonly").hidden = S.canWrite;
+    var dl = $("#char-works"); dl.textContent = "";
+    entries.forEach(function (en) { dl.append(h("option", { value: en.work.title })); });
+    var cr = $("#char-rarity");
+    if (!cr.options.length) { RARITIES.forEach(function (r) { cr.append(h("option", { value: r, text: r })); }); cr.value = "Commun"; }
+    ["char-name", "char-work", "char-rarity", "char-score", "char-desc", "char-submit"].forEach(function (id) { $("#" + id).disabled = !S.canWrite; });
     $("#work-title").disabled = !S.canWrite;
     $("#work-rank").disabled = !S.canWrite;
     $("#work-wiki").disabled = !S.canWrite;
@@ -785,6 +805,42 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
       notify("Œuvre supprimée" + (removed.length ? ", avec ses personnages et leurs choix." : "."));
     } catch (e) { notify("Suppression impossible : " + ((e && e.message) || "erreur"), true); }
   }
+  async function addCharacter(event) {
+    event.preventDefault();
+    if (!S.canWrite || S.demo) { notify("Connecte-toi avec un compte autorisé pour ajouter un personnage.", true); return; }
+    var name = $("#char-name").value.trim(), work = $("#char-work").value.trim(), rar = $("#char-rarity").value;
+    var score = $("#char-score").value.trim(), desc = $("#char-desc").value.trim();
+    if (!name || !work) { notify("Le nom du personnage et l’œuvre sont obligatoires.", true); return; }
+    if (charById(charId(name, work))) { notify("Ce personnage existe déjà dans cette œuvre.", true); return; }
+    var head = S.head.length ? S.head.slice() : ["rang", "personnage", "oeuvre", "description", "score_popularite", "rarete"];
+    var m = mapFromHead(head), row = head.map(function () { return ""; });
+    row[m.name] = name; row[m.work] = work;
+    if (m.desc >= 0) row[m.desc] = desc;
+    if (m.score >= 0) row[m.score] = score;
+    if (m.rarity >= 0) row[m.rarity] = rar;
+    if (m.src >= 0) row[m.src] = "ajout_manuel";
+    var rows = S.chars.slice().sort(function (a, b) { return a.i - b.i; }).map(function (c) { return (c.v || []).slice(); });
+    rows.push(row);
+    var isNewWork = !workIndex()[normKey(work)];
+    try {
+      await S.store.replaceChars(head, rows, function () {});
+      if (isNewWork) await S.store.saveWorks(S.works.concat([{ title: work, rank: null, note: "Ajoutée manuellement", wiki: "" }]));
+      $("#char-form").reset(); $("#char-rarity").value = "Commun";
+      notify("Personnage ajouté" + (isNewWork ? " (œuvre créée)." : "."));
+    } catch (e) { notify("Ajout impossible : " + ((e && e.message) || "erreur"), true); }
+  }
+  async function deleteChar(c) {
+    if (!S.canWrite || S.demo) return;
+    if (!window.confirm("Supprimer « " + c.name + " » (" + c.work + ") ? Ses choix de photos, de GIF et de rareté seront aussi supprimés. Action irréversible.")) return;
+    try {
+      var kept = S.chars.filter(function (x) { return x.id !== c.id; }).sort(function (a, b) { return a.i - b.i; })
+        .map(function (x) { return (x.v || []).slice(); });
+      await S.store.replaceChars(S.head, kept, function () {});
+      await S.store.deletePicks([c.id]);
+      S.sel = null; renderDetail();
+      notify("Personnage supprimé.");
+    } catch (e) { notify("Suppression impossible : " + ((e && e.message) || "erreur"), true); }
+  }
   function renderRuleStatus() {
     var panel = $("#rules-status"), issues = allWorkRuleIssues();
     panel.textContent = "";
@@ -814,18 +870,20 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
   /* photo principale effective : le choix de l'équipe, sinon la première image du CSV */
   function effPrimary(c) { var p = S.picks[c.id]; return (p && p.primary) || c.img || ""; }
   function effRarity(c) { var p = S.picks[c.id]; return (p && p.rarity) || c.rarity; }
+  function isDiv(r) { return r === "Divin" || r === "Special"; }
   function setRarity(c, r) {
     var current = effRarity(c), next = (!r || r === c.rarity) ? c.rarity : r;
     if (next === current) return;
+    if (isDiv(current) && isDiv(next)) { var q = pick(c.id); q.rarity = next === c.rarity ? "" : next; savePick(c.id, q); return; }
     var work = workIndex()[c.wk];
     var counts = rarityCounts(c.wk);
-    if (work && work.rank >= 1 && work.rank <= 5 && current === "Divin" && next !== "Divin" && counts.divine <= 1) {
+    if (work && work.rank >= 1 && work.rank <= 5 && isDiv(current) && !isDiv(next) && counts.divine <= 1) {
       notify("Cette œuvre du top 5 doit conserver au moins un personnage Divin.", true); renderDetail(); return;
     }
     if (work && work.rank >= 6 && work.rank <= 10 && current === "Mythique" && next !== "Mythique" && counts.mythique <= 1) {
       notify("Cette œuvre du top 6 à 10 doit conserver au moins un personnage Mythique.", true); renderDetail(); return;
     }
-    if (next === "Divin" && current !== "Divin" && counts.divine >= 2) {
+    if (isDiv(next) && !isDiv(current) && counts.divine >= 2) {
       notify("Maximum de 2 personnages Divins atteint pour « " + c.work + " ».", true); renderDetail(); return;
     }
     if (next === "Mythique" && current !== "Mythique" && counts.mythique >= 3) {
@@ -910,8 +968,23 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
     a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
+  /* Structure d'une carte exportée : mêmes colonnes, même ordre, pour toutes les cartes.
+     Special = GIF seul ; toutes les autres raretés = image principale + image de secours. */
+  var CARD_FIELDS = ["id", "personnage", "oeuvre", "rang_oeuvre", "rarete", "rarete_script", "score", "importance",
+    "description", "type_media", "image_principale", "image_secours", "gif", "url_pinterest", "validee"];
+  function buildCards() {
+    var ix = workIndex();
+    var rows = S.chars.slice().sort(function (a, b) { return a.i - b.i; }).map(function (c) {
+      var p = S.picks[c.id] || {}, r = effRarity(c), sp = r === "Special", w = ix[c.wk];
+      return [c.id, c.name, c.work, w && w.rank != null ? w.rank : "", r, c.rarityScript || c.rarity,
+        c.score || "", c.imp, c.desc, sp ? "gif" : "images",
+        sp ? "" : effPrimary(c), sp ? "" : (p.backup || ""), sp ? (p.gif || "") : "",
+        c.pin, (sp ? p.gif : p.primary) ? "oui" : "non"];
+    });
+    return { head: CARD_FIELDS.slice(), rows: rows };
+  }
   function selectedExportData() {
-    var t = buildTable(S.chars, S.head, S.picks);
+    var t = buildCards();
     var selected = [].slice.call(document.querySelectorAll("#export-fields input:checked"))
       .map(function (input) { return Number(input.value); });
     if (!selected.length) { notify("Sélectionne au moins une colonne à exporter.", true); return null; }
@@ -980,7 +1053,7 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
   }
   function openExportDialog() {
     if (!S.chars.length || S.demo) { notify('Aucune donnée réelle à exporter.', true); return; }
-    var t = buildTable(S.chars, S.head, S.picks), fields = $("#export-fields");
+    var t = buildCards(), fields = $("#export-fields");
     fields.textContent = "";
     t.head.forEach(function (name, i) {
       fields.append(h("label", { class: "export-field" },
@@ -1173,16 +1246,16 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
     list.slice(S.page * PAGE, (S.page + 1) * PAGE).forEach(function (c) {
       var p = S.picks[c.id] || {};
       var tr = h("tr", { tabindex: "0", "aria-selected": String(S.sel === c.id) },
-        h("td", {}, thumb((effRarity(c) === "Divin" && p.gif && p.showGif) ? p.gif : (p.primary || c.img))),
+        h("td", {}, thumb(effRarity(c) === "Special" && p.gif ? p.gif : (p.primary || c.img))),
         h("td", { class: "name", text: c.name }),
         h("td", { class: "work", text: c.work }),
         h("td", {}, pill(effRarity(c)), effRarity(c) !== c.rarityScript ? h("span", { class: "chip mod", text: "modifiée" }) : null),
         h("td", { class: "num", text: c.score ? fmt(c.score) : "—" }),
         h("td", { class: "desc" }, h("span", { text: c.desc || "—" })),
         h("td", {}, h("div", { class: "chips" },
-          h("span", { class: "chip" + (effPrimary(c) ? " on" : ""), text: "Principale" }),
-          h("span", { class: "chip" + (p.backup ? " on" : ""), text: "Secours" }),
-          effRarity(c) === "Divin" ? h("span", { class: "chip" + (p.gif ? " on" : ""), text: "GIF" }) : null)));
+          effRarity(c) === "Special" ? h("span", { class: "chip" + (p.gif ? " on" : ""), text: "GIF" }) : h("span", { class: "chip" + (effPrimary(c) ? " on" : ""), text: "Principale" }),
+          effRarity(c) === "Special" ? null : h("span", { class: "chip" + (p.backup ? " on" : ""), text: "Secours" }),
+          null)));
       function open() { S.sel = c.id; renderList(); renderDetail(); }
       tr.addEventListener("click", open);
       tr.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
@@ -1210,7 +1283,9 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
 
     d.append(h("header", {},
       h("div", {}, h("h2", { text: c.name }), h("div", { class: "work", text: c.work })),
-      h("button", { class: "btn small", type: "button", onclick: function () { S.sel = null; renderList(); renderDetail(); }, "aria-label": "Fermer la fiche", text: "Fermer" })));
+      h("div", { class: "actions" },
+        h("button", { class: "btn small", type: "button", disabled: !w, onclick: function () { deleteChar(c); }, text: "Supprimer" }),
+        h("button", { class: "btn small", type: "button", onclick: function () { S.sel = null; renderList(); renderDetail(); }, "aria-label": "Fermer la fiche", text: "Fermer" }))));
     var rsel = h("select", { "aria-label": "Rareté du personnage", disabled: !w, onchange: function (e) { setRarity(c, e.target.value); } },
       RARITIES.map(function (r) { return h("option", { value: r, text: r + (r === c.rarityScript ? " (script)" : "") }); }));
     rsel.value = effRarity(c);
@@ -1228,22 +1303,32 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
         h("span", { class: "url", title: url || "", text: url || "Pas encore choisie" }),
         (url && (slot !== "primary" || p.primary)) ? h("button", { class: "btn small ghost", type: "button", disabled: !w, onclick: function () { clearSlot(c, slot); }, text: slot === "primary" ? "Défaut" : "Effacer" }) : h("span"));
     }
-    if (effRarity(c) === "Divin" || p.gif) {
+    if (isDiv(effRarity(c))) {
+      var isSp = effRarity(c) === "Special";
+      var mediaRadio = function (val, label) {
+        return h("label", {}, h("input", { type: "radio", name: "media-" + c.id, checked: (val === "gif") === isSp, disabled: !w,
+          onchange: function () { setRarity(c, val === "gif" ? "Special" : "Divin"); } }), " " + label);
+      };
+      d.append(h("section", {}, h("h3", { text: "Média de la carte" }),
+        h("div", { class: "mediachoice" }, mediaRadio("images", "Deux images (principale + secours) : Divin"), mediaRadio("gif", "Un GIF : rareté Special"))));
+    }
+    if (effRarity(c) === "Special") {
       var gin = h("input", { type: "url", placeholder: "https://media.tenor.com/….gif", "aria-label": "Adresse du GIF", disabled: !w });
       gin.value = "";
       d.append(h("section", { class: "gifadd" }, h("h3", { text: "GIF (rareté Divin)" }),
         h("div", { class: "choice" }, h("div", { class: "row" }, h("span", { class: "lbl", text: "GIF" }),
           h("span", { class: "url", title: p.gif, text: p.gif || "Pas encore choisi" }),
           p.gif ? h("button", { class: "btn small ghost", type: "button", disabled: !w, onclick: function () { var q = pick(c.id); q.gif = ""; savePick(c.id, q); }, text: "Effacer" }) : h("span"))),
-        p.gif ? h("label", { class: "hint" }, h("input", { type: "checkbox", checked: p.showGif, disabled: !w, onchange: function (e) { var q = pick(c.id); q.showGif = e.target.checked; savePick(c.id, q); } }), " Utiliser ce GIF comme média principal (sinon la photo Principale reste affichée)") : null,
+        null,
         p.gif ? h("div", { class: "gallery" }, h("div", { class: "tile" }, thumb(p.gif), h("div", { class: "tile-actions" }, h("a", { href: p.gif, target: "_blank", rel: "noopener noreferrer", text: "Ouvrir" })))) : null,
         h("div", { class: "actions" },
           h("a", { class: "btn small", href: gifSearchUrl(c, "tenor"), target: "_blank", rel: "noopener noreferrer", text: "Chercher sur Tenor" }),
           h("a", { class: "btn small", href: gifSearchUrl(c, "giphy"), target: "_blank", rel: "noopener noreferrer", text: "Chercher sur GIPHY" })),
         h("div", { class: "line" }, gin, h("button", { class: "btn small primary", type: "button", disabled: !w, onclick: function () { if (setGif(c, gin.value)) gin.value = ""; }, text: "Définir" })),
-        h("p", { class: "hint", text: "Sur Tenor ou GIPHY : clic droit sur le GIF, « Copier l'adresse de l'image » (elle finit par .gif). Un lien de page est accepté mais sans aperçu. Par défaut la photo Principale reste affichée ; coche la case pour que le GIF la remplace." })));
+        h("p", { class: "hint", text: "Sur Tenor ou GIPHY : clic droit sur le GIF, « Copier l'adresse de l'image » (elle finit par .gif). Un lien de page est accepté mais sans aperçu. Une carte Special n'a pas d'images : seul le GIF est utilisé." })));
     }
-    d.append(h("section", {}, h("h3", { text: "Choix" }),
+    var imgTarget = effRarity(c) === "Special" ? document.createDocumentFragment() : d;
+    imgTarget.append(h("section", {}, h("h3", { text: "Choix" }),
       h("div", { class: "choice" }, slotRow("Principale", effPrimary(c), "primary"), slotRow("Secours", p.backup, "backup")),
       h("p", { class: "hint", text: (!p.primary && c.img ? "La première image du CSV est la principale par défaut ; clique sur « Principale » pour la confirmer ou choisis-en une autre. " : "") + "La photo de secours prend le relais si l'auteur supprime la principale." })));
 
@@ -1263,11 +1348,11 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
           it.kind === "added" ? h("button", { class: "btn small ghost", type: "button", disabled: !w, onclick: function () { removeCand(c, it.u); }, text: "Retirer" }) : null,
           h("a", { href: it.u, target: "_blank", rel: "noopener noreferrer", text: "Ouvrir" }))));
     });
-    d.append(h("section", {}, h("h3", { text: "Photos du personnage" }), gal));
+    imgTarget.append(h("section", {}, h("h3", { text: "Photos du personnage" }), gal));
 
     var area = h("textarea", { id: "add-urls", placeholder: "https://i.pinimg.com/736x/…\nhttps://i.pinimg.com/736x/…", "aria-label": "Adresses des photos à ajouter", disabled: !w });
     area.value = draft;
-    d.append(h("section", { class: "add" }, h("h3", { text: "Ajouter des photos Pinterest" }),
+    imgTarget.append(h("section", { class: "add" }, h("h3", { text: "Ajouter des photos Pinterest" }),
       h("div", {}, h("a", { class: "btn small", href: pinUrl, target: "_blank", rel: "noopener noreferrer", text: "Chercher sur Pinterest" })),
       area,
       h("div", {}, h("button", { class: "btn small primary", type: "button", disabled: !w, onclick: function () {
@@ -1300,6 +1385,7 @@ dialog.export-dialog::backdrop { background: rgb(10 14 30 / 55%); }
     $("#export-cancel").addEventListener("click", function () { $("#export-dialog").close(); });
     $("#btn-works").addEventListener("click", openWorksManager);
     $("#work-form").addEventListener("submit", saveWorkDefinition);
+    $("#char-form").addEventListener("submit", addCharacter);
     $("#work-cancel-edit").addEventListener("click", resetWorkForm);
     $("#works-close").addEventListener("click", function () { $("#works-dialog").close(); });
     $("#btn-login").addEventListener("click", async function () {
